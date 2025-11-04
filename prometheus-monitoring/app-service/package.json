@@ -1,0 +1,63 @@
+{
+  "_comment_file_purpose": "==================================================================",
+  "_comment_description": "Node.js Package Definition File (package.json)",
+  "_comment_what_is_this": "This file defines the Node.js application metadata and dependencies. It's like a manifest that tells npm (Node Package Manager) what libraries this application needs and how to run it.",
+  "_comment_used_by": "npm install, npm start, Docker build process",
+  "_comment": "==================================================================",
+
+  "name": "enterprise-metrics-app",
+  "_comment_name": "Application name - used for identification and npm registry if published. Must be lowercase with hyphens, no spaces.",
+
+  "version": "1.0.0",
+  "_comment_version": "Semantic versioning (MAJOR.MINOR.PATCH). Format: 1.0.0 means: major version 1, minor version 0, patch 0. Increment MAJOR for breaking changes, MINOR for new features, PATCH for bug fixes.",
+
+  "description": "Enterprise application with built-in Prometheus metrics",
+  "_comment_description": "Human-readable description of what this application does. Shows up in npm search and documentation.",
+
+  "main": "server.js",
+  "_comment_main": "Entry point file - the first file Node.js executes when running this application. This is where our Express server and metrics are defined.",
+
+  "scripts": {
+    "_comment_scripts": "==================================================================",
+    "_comment_scripts_purpose": "Custom commands that can be run with 'npm run <script-name>'",
+    "_comment_scripts_usage": "Scripts automate common tasks like starting the server, running tests, or building the application.",
+    "_comment_scripts_note": "==================================================================",
+
+    "start": "node server.js",
+    "_comment_start": "START SCRIPT - Runs when you execute 'npm start'. This is the command Docker uses to start our application. 'node server.js' tells Node.js to execute the server.js file."
+  },
+
+  "dependencies": {
+    "_comment_dependencies": "==================================================================",
+    "_comment_dependencies_purpose": "Required packages for the application to run",
+    "_comment_dependencies_install": "These are installed when you run 'npm install'",
+    "_comment_dependencies_production": "These must be included in production deployments",
+    "_comment_dependencies_note": "Version format: ^4.18.2 means >= 4.18.2 but < 5.0.0 (caret allows minor and patch updates)",
+    "_comment": "==================================================================",
+
+    "express": "^4.18.2",
+    "_comment_express": "EXPRESS WEB FRAMEWORK - Fast, minimalist web framework for Node.js. Provides: HTTP server, routing (/api/users), middleware (logging, auth), request/response handling. Why? Makes building REST APIs and web servers much easier than using raw Node.js http module. Without Express, we'd need 10x more code. Official: https://expressjs.com",
+
+    "prom-client": "^15.1.0",
+    "_comment_prom_client": "PROMETHEUS CLIENT LIBRARY - Official Prometheus client for Node.js. Provides: Metric types (Counter, Gauge, Histogram, Summary), Default Node.js metrics (CPU, memory, GC), Prometheus text format exporter. Why? This is what makes our app 'Prometheus-ready'. It handles all the complexity of metric formatting and collection. Without this, we'd have to manually format metrics in Prometheus text format (very tedious!). Official: https://github.com/siimon/prom-client. This is the CORE library that enables direct scraping without needing an exporter."
+  },
+
+  "_comment_dev_dependencies": "==================================================================",
+  "_comment_dev_dependencies_note": "We don't have devDependencies in this project because it's a simple demo. In a real project, you'd have: 'devDependencies': { 'eslint': '^8.0.0' (code linting), 'jest': '^29.0.0' (testing), 'nodemon': '^3.0.0' (auto-restart during development) }. DevDependencies are NOT installed in production (Docker uses --production flag).",
+  "_comment_end": "==================================================================",
+
+  "_final_note_1": "HOW THIS FILE IS USED:",
+  "_final_note_2": "1. Developer runs 'npm install' → npm reads dependencies → downloads express and prom-client",
+  "_final_note_3": "2. Docker build runs 'npm install --production' → installs only dependencies (not devDependencies)",
+  "_final_note_4": "3. Docker starts container with 'npm start' → executes 'node server.js' → server starts on port 3000",
+  "_final_note_5": "4. Application is now running and exposing /metrics endpoint for Prometheus",
+
+  "_final_note_package_lock": "==================================================================",
+  "_final_note_lock_file": "When you run 'npm install', npm also creates package-lock.json which locks EXACT versions of all dependencies (including sub-dependencies). This ensures consistent installs across different machines. Always commit package-lock.json to version control!",
+
+  "_final_note_why_json": "==================================================================",
+  "_final_note_json_format": "This file is in JSON format, which means these _comment fields are technically not standard. In a real project, you'd put comments in a separate README.md. But for learning purposes, these inline comments explain each field.",
+
+  "_final_note_npm_vs_yarn": "==================================================================",
+  "_final_note_package_managers": "npm is the default Node.js package manager. Alternatives: yarn (faster, created by Facebook), pnpm (more efficient disk usage). All work with package.json, just different install commands."
+}

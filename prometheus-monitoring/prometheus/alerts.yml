@@ -1,0 +1,102 @@
+# Prometheus Alert Rules
+# These rules define conditions that trigger alerts
+
+groups:
+  - name: application_alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(application_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors/second for {{ $labels.error_type }}"
+
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "High request latency detected"
+          description: "95th percentile latency is {{ $value }}s on {{ $labels.route }}"
+
+      - alert: LowCacheHitRate
+        expr: rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m])) < 0.5
+        for: 10m
+        labels:
+          severity: info
+          team: backend
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }} for {{ $labels.cache_type }}"
+
+  - name: database_alerts
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgresql"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "PostgreSQL exporter is down"
+          description: "PostgreSQL metrics are not being collected"
+
+      - alert: TooManyConnections
+        expr: pg_stat_activity_connections > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Too many database connections"
+          description: "Database has {{ $value }} connections for {{ $labels.datname }}"
+
+      - alert: HighDeadTuples
+        expr: pg_stat_user_tables_n_dead_tup > 1000
+        for: 10m
+        labels:
+          severity: info
+          team: infrastructure
+        annotations:
+          summary: "High number of dead tuples"
+          description: "Table {{ $labels.relname }} has {{ $value }} dead tuples"
+
+      - alert: SlowQueries
+        expr: pg_slow_queries_slow_queries > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Multiple slow queries detected"
+          description: "{{ $value }} queries are running for more than 5 seconds"
+
+  - name: business_alerts
+    interval: 1m
+    rules:
+      - alert: HighFailedOrders
+        expr: rate(orders_total{status="failed"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "High rate of failed orders"
+          description: "Failed order rate is {{ $value }} orders/second"
+
+      - alert: LowStockLevel
+        expr: business_product_stock_stock_quantity < 10
+        for: 1h
+        labels:
+          severity: info
+          team: inventory
+        annotations:
+          summary: "Low stock level detected"
+          description: "Product {{ $labels.name }} has only {{ $value }} items in stock"

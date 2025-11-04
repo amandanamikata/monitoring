@@ -1,0 +1,100 @@
+# Prometheus Configuration
+# This file defines how Prometheus scrapes metrics from targets
+
+global:
+  scrape_interval: 15s      # How frequently to scrape targets by default
+  evaluation_interval: 15s  # How frequently to evaluate rules
+  external_labels:
+    cluster: 'enterprise-monitoring'
+    environment: 'production'
+
+# Alertmanager configuration (optional, for future use)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Load rules once and periodically evaluate them
+# rule_files:
+#   - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # ==================================================
+  # JOB 1: Prometheus self-monitoring
+  # ==================================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          type: 'monitoring'
+
+  # ==================================================
+  # JOB 2: Node.js Application with Built-in Metrics
+  # This demonstrates DIRECT scraping - no exporter needed
+  # The app exposes /metrics endpoint natively
+  # ==================================================
+  - job_name: 'enterprise-app'
+    scrape_interval: 10s    # Scrape more frequently for application metrics
+    static_configs:
+      - targets: ['app-service:3000']
+        labels:
+          service: 'enterprise-app'
+          type: 'application'
+          scrape_method: 'direct'   # No exporter needed
+          team: 'backend'
+
+    # Optional: Add metric relabeling
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'http_.*'
+        target_label: 'metric_category'
+        replacement: 'http'
+      - source_labels: [__name__]
+        regex: '(orders|revenue|users)_.*'
+        target_label: 'metric_category'
+        replacement: 'business'
+
+  # ==================================================
+  # JOB 3: PostgreSQL via postgres_exporter
+  # This demonstrates EXPORTER-based scraping
+  # PostgreSQL doesn't expose Prometheus metrics natively
+  # We need postgres_exporter as an adapter/bridge
+  # ==================================================
+  - job_name: 'postgresql'
+    scrape_interval: 30s    # Database metrics don't change as frequently
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgresql'
+          type: 'database'
+          scrape_method: 'exporter'  # Requires exporter adapter
+          team: 'infrastructure'
+          database: 'enterprise_db'
+
+    # Relabel to show which exporter is being used
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'pg_.*'
+        target_label: 'exporter'
+        replacement: 'postgres_exporter'
+      - source_labels: [__name__]
+        regex: 'business_.*'
+        target_label: 'metric_category'
+        replacement: 'business_from_db'
+
+  # ==================================================
+  # JOB 4: PostgreSQL Exporter self-monitoring
+  # The exporter itself exposes metrics about its operation
+  # ==================================================
+  - job_name: 'postgres-exporter-internal'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres-exporter'
+          type: 'exporter-internal'
+
+# Optional: Remote write configuration for long-term storage
+# remote_write:
+#   - url: "https://your-remote-storage/api/v1/write"

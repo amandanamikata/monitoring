@@ -1,0 +1,278 @@
+{
+  "dashboard": {
+    "title": "Enterprise Application Metrics",
+    "tags": ["application", "nodejs", "business"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{method}} {{route}} - {{status_code}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "reqps", "label": "Requests/sec" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Request Duration (95th percentile)",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{method}} {{route}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "s", "label": "Duration" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Total Orders by Status",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "orders_total",
+            "legendFormat": "{{status}} - {{payment_method}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Total Revenue by Category",
+        "type": "stat",
+        "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "revenue_total_dollars",
+            "legendFormat": "{{product_category}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Active Users",
+        "type": "gauge",
+        "gridPos": { "x": 12, "y": 8, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "active_users_current",
+            "legendFormat": "{{user_type}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 6,
+        "title": "User Registrations Rate",
+        "type": "graph",
+        "gridPos": { "x": 18, "y": 8, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "rate(user_registrations_total[5m])",
+            "legendFormat": "{{registration_method}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Registrations/sec" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Cache Hit Rate",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m]))",
+            "legendFormat": "{{cache_type}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "percentunit", "label": "Hit Rate", "max": 1, "min": 0 },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Database Query Duration",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(database_query_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{query_type}} on {{table}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "s", "label": "Duration (95th percentile)" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Application Errors",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(application_errors_total[5m])",
+            "legendFormat": "{{error_type}} - {{severity}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Errors/sec" },
+          { "format": "short" }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": { "params": [0.1], "type": "gt" },
+              "operator": { "type": "and" },
+              "query": { "params": ["A", "5m", "now"] },
+              "reducer": { "params": [], "type": "avg" },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Error Rate",
+          "noDataState": "no_data"
+        }
+      },
+      {
+        "id": 10,
+        "title": "Active Connections",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "active_connections_current",
+            "legendFormat": "{{connection_type}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Connections" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Queue Sizes",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "queue_size_current",
+            "legendFormat": "{{queue_name}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Queue Size" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Node.js Memory Usage",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{job=\"enterprise-app\"}",
+            "legendFormat": "Resident Memory",
+            "refId": "A"
+          },
+          {
+            "expr": "nodejs_heap_size_used_bytes{job=\"enterprise-app\"}",
+            "legendFormat": "Heap Used",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          { "format": "bytes", "label": "Memory" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 36, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{job=\"enterprise-app\"}[5m])",
+            "legendFormat": "CPU Usage",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "percentunit", "label": "CPU" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 14,
+        "title": "Event Loop Lag",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 36, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "nodejs_eventloop_lag_seconds{job=\"enterprise-app\"}",
+            "legendFormat": "Event Loop Lag",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "s", "label": "Lag" },
+          { "format": "short" }
+        ]
+      }
+    ]
+  }
+}

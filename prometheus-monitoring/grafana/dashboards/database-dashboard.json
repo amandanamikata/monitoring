@@ -1,0 +1,334 @@
+{
+  "dashboard": {
+    "title": "PostgreSQL Database Metrics (via Exporter)",
+    "tags": ["database", "postgresql", "exporter"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Database Size",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+        "targets": [
+          {
+            "expr": "pg_database_size_bytes{datname=\"enterprise_db\"}",
+            "legendFormat": "{{datname}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Active Connections by State",
+        "type": "graph",
+        "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
+        "targets": [
+          {
+            "expr": "pg_stat_activity_connections",
+            "legendFormat": "{{datname}} - {{state}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Connections" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Slow Queries",
+        "type": "stat",
+        "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
+        "targets": [
+          {
+            "expr": "pg_slow_queries_slow_queries",
+            "legendFormat": "Slow Queries",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 5, "color": "yellow" },
+                { "value": 10, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Cache Hit Ratio",
+        "type": "gauge",
+        "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "pg_cache_hit_ratio_ratio",
+            "legendFormat": "Hit Ratio",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 0.8, "color": "yellow" },
+                { "value": 0.95, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Table Sequential Scans",
+        "type": "graph",
+        "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(pg_stat_user_tables_seq_scan[5m])",
+            "legendFormat": "{{relname}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Scans/sec" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Table Index Scans",
+        "type": "graph",
+        "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(pg_stat_user_tables_idx_scan[5m])",
+            "legendFormat": "{{relname}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Scans/sec" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Live vs Dead Tuples",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "pg_stat_user_tables_n_live_tup",
+            "legendFormat": "{{relname}} - live",
+            "refId": "A"
+          },
+          {
+            "expr": "pg_stat_user_tables_n_dead_tup",
+            "legendFormat": "{{relname}} - dead",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Tuples" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Tuple Modifications",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(pg_stat_user_tables_n_tup_ins[5m])",
+            "legendFormat": "{{relname}} - inserts",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(pg_stat_user_tables_n_tup_upd[5m])",
+            "legendFormat": "{{relname}} - updates",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(pg_stat_user_tables_n_tup_del[5m])",
+            "legendFormat": "{{relname}} - deletes",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Operations/sec" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Database Locks",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "pg_locks_count_locks",
+            "legendFormat": "{{mode}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Locks" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "PostgreSQL Up Status",
+        "type": "stat",
+        "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "up{job=\"postgresql\"}",
+            "legendFormat": "PostgreSQL Exporter",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "value": "0", "text": "DOWN", "color": "red" },
+              { "value": "1", "text": "UP", "color": "green" }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Business: Orders by Status",
+        "type": "piechart",
+        "gridPos": { "x": 0, "y": 28, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "business_orders_by_status_count",
+            "legendFormat": "{{order_status}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "pieType": "pie",
+          "displayLabels": ["name", "percent"]
+        }
+      },
+      {
+        "id": 12,
+        "title": "Business: Revenue by Status",
+        "type": "stat",
+        "gridPos": { "x": 8, "y": 28, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "business_orders_by_status_total_amount",
+            "legendFormat": "{{order_status}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        }
+      },
+      {
+        "id": 13,
+        "title": "Business: Users by Account Type",
+        "type": "bargauge",
+        "gridPos": { "x": 16, "y": 28, "w": 8, "h": 8 },
+        "targets": [
+          {
+            "expr": "business_users_by_type_count",
+            "legendFormat": "{{account_type}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 14,
+        "title": "Business: Product Stock Levels",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 36, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "business_product_stock_stock_quantity",
+            "legendFormat": "{{name}} ({{category}})",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Stock Quantity" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 15,
+        "title": "Business: Daily Revenue (Last 7 Days)",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 36, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "business_daily_revenue_revenue",
+            "legendFormat": "{{date}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          { "format": "currencyUSD", "label": "Revenue" },
+          { "format": "short" }
+        ]
+      }
+    ]
+  }
+}

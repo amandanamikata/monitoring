@@ -1,0 +1,852 @@
+# ==============================================================================
+# DOCKER COMPOSE FILE FOR ENTERPRISE MONITORING STACK
+# ==============================================================================
+#
+# WHAT IS THIS FILE?
+# This file defines our entire monitoring infrastructure using Docker Compose.
+# Instead of running multiple 'docker run' commands, we define everything here
+# and start it with one command: docker-compose up -d
+#
+# WHY DOCKER COMPOSE?
+# - Manages multiple containers (5 in this case) as a single application
+# - Handles networking between containers automatically
+# - Manages volumes for data persistence
+# - Ensures containers start in correct order (dependencies)
+# - Makes it easy to start/stop/update entire stack
+# - Configuration is version-controlled and shareable
+#
+# ==============================================================================
+
+# COMPOSE FILE VERSION
+# Specifies which Docker Compose syntax version we're using
+# Version 3.8 is modern and supports all features we need
+# See: https://docs.docker.com/compose/compose-file/compose-versioning/
+version: '3.8'
+
+# ==============================================================================
+# SERVICES (CONTAINERS)
+# ==============================================================================
+# This section defines all the containers that make up our application.
+# Each "service" becomes a running container when we do 'docker-compose up'
+#
+# Think of services as individual applications that work together:
+# - app-service: Our Node.js application
+# - postgres: Database
+# - postgres-exporter: Database metrics translator
+# - prometheus: Metrics collector
+# - grafana: Visualization dashboard
+# ==============================================================================
+
+services:
+
+  # ============================================================================
+  # SERVICE 1: APPLICATION SERVICE (Node.js with Built-in Metrics)
+  # ============================================================================
+  # This is our custom Node.js application that exposes Prometheus metrics
+  # directly at /metrics endpoint. This demonstrates DIRECT SCRAPING.
+  #
+  # KEY POINT: This service has built-in Prometheus support, so no exporter
+  # is needed. Prometheus can scrape metrics directly from port 3000.
+  # ============================================================================
+
+  app-service:
+    # BUILD CONFIGURATION
+    # Instead of using a pre-built image, we build this container from source
+    # Docker Compose will:
+    # 1. Look for a Dockerfile in ./app-service/
+    # 2. Build an image from that Dockerfile
+    # 3. Use that image to create the container
+    #
+    # WHY BUILD INSTEAD OF IMAGE?
+    # Because this is our custom application code, not a standard image
+    build: ./app-service
+
+    # CONTAINER NAME
+    # By default, Docker Compose names containers: projectname_servicename_1
+    # We override this to give it a friendly name: enterprise-app
+    #
+    # WHY? Makes it easier to identify in 'docker ps' and logs
+    container_name: enterprise-app
+
+    # PORT MAPPING
+    # Format: "HOST_PORT:CONTAINER_PORT"
+    # Maps port 3000 on your computer to port 3000 inside the container
+    #
+    # WHAT THIS MEANS:
+    # - Container listens on port 3000 internally
+    # - We can access it from our computer at localhost:3000
+    # - Other containers can access it at app-service:3000 (service name)
+    #
+    # WHY THIS PORT?
+    # Our Node.js app listens on port 3000 (defined in server.js)
+    ports:
+      - "3000:3000"
+
+    # NETWORKS
+    # Connects this container to the 'monitoring' network
+    # All containers on the same network can communicate with each other
+    #
+    # HOW CONTAINERS COMMUNICATE:
+    # From prometheus container: http://app-service:3000/metrics
+    #                                  ↑
+    #                            Service name = hostname
+    #
+    # WHY NETWORKS?
+    # - Isolates containers from other Docker containers
+    # - Provides DNS resolution (service names become hostnames)
+    # - More secure than exposing everything publicly
+    networks:
+      - monitoring
+
+    # HEALTH CHECK
+    # Docker will periodically check if the container is healthy
+    #
+    # test: Command to run (wget to /health endpoint)
+    # interval: Check every 30 seconds
+    # timeout: Wait max 10 seconds for response
+    # retries: Try 3 times before marking unhealthy
+    # start_period: Wait 40 seconds before starting checks (app startup time)
+    #
+    # WHY HEALTH CHECKS?
+    # - Know if container is actually working (not just running)
+    # - Other containers can wait for healthy status (depends_on)
+    # - Monitoring tools can detect failures
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # RESTART POLICY
+    # Tells Docker what to do if container stops
+    #
+    # Options:
+    # - no: Don't restart (default)
+    # - always: Always restart
+    # - on-failure: Restart only if exit code indicates error
+    # - unless-stopped: Always restart unless manually stopped
+    #
+    # WHY unless-stopped?
+    # Container will survive server reboots but won't restart if we
+    # explicitly stop it with 'docker-compose stop'
+    restart: unless-stopped
+
+  # ============================================================================
+  # SERVICE 2: POSTGRESQL DATABASE
+  # ============================================================================
+  # This is our database service. PostgreSQL DOES NOT have built-in Prometheus
+  # metrics, so we'll need postgres-exporter (next service) to get metrics.
+  #
+  # KEY POINT: This demonstrates why we need exporters. PostgreSQL speaks SQL,
+  # not Prometheus format. The exporter translates between them.
+  # ============================================================================
+
+  postgres:
+    # IMAGE
+    # Instead of building from source, we use a pre-built official image
+    #
+    # Format: IMAGE_NAME:TAG
+    # - postgres: Official PostgreSQL image from Docker Hub
+    # - 15-alpine: Version 15, Alpine Linux variant (smaller size)
+    #
+    # WHY ALPINE?
+    # Alpine images are 5-10x smaller than regular images, faster to download
+    #
+    # WHERE DOES THIS COME FROM?
+    # Docker will automatically download from hub.docker.com/r/_/postgres
+    image: postgres:15-alpine
+
+    # CONTAINER NAME
+    container_name: postgres-db
+
+    # ENVIRONMENT VARIABLES
+    # Passes configuration to the PostgreSQL container
+    # These are like command-line arguments but for Docker
+    #
+    # WHY ENVIRONMENT VARIABLES?
+    # - PostgreSQL image expects these to configure the database
+    # - Different way to pass config without modifying the image
+    # - Can be different per environment (dev/prod)
+    #
+    # SECURITY NOTE:
+    # In production, NEVER hardcode passwords like this!
+    # Use Docker secrets, vault, or environment files (.env)
+    environment:
+      # Default database user (superuser)
+      POSTGRES_USER: postgres
+
+      # Password for the postgres user
+      # SECURITY WARNING: This is not secure! Only for demo.
+      POSTGRES_PASSWORD: postgres
+
+      # Initial database to create
+      POSTGRES_DB: postgres
+
+    # PORT MAPPING
+    # Maps PostgreSQL port 5432 to same port on host
+    #
+    # WHY EXPOSE THIS?
+    # - Allows us to connect from database clients (pgAdmin, DBeaver, psql)
+    # - Other containers can connect at postgres:5432
+    #
+    # SECURITY NOTE:
+    # In production, you might not expose this publicly
+    ports:
+      - "5432:5432"
+
+    # VOLUMES
+    # Mounts storage to persist data and provide files to container
+    #
+    # TWO TYPES OF VOLUMES HERE:
+    # 1. Named volume: postgres-data:/var/lib/postgresql/data
+    # 2. Bind mount: ./postgres-exporter/init.sql:/path/in/container
+    volumes:
+      # NAMED VOLUME (data persistence)
+      # Format: VOLUME_NAME:PATH_IN_CONTAINER
+      #
+      # postgres-data: Named volume defined at bottom of this file
+      # /var/lib/postgresql/data: Where PostgreSQL stores database files
+      #
+      # WHY THIS IS CRUCIAL:
+      # Without this, all data is lost when container stops!
+      # Named volume persists data between container restarts
+      # Data is stored in Docker's managed storage area
+      #
+      # WHERE IS THE DATA?
+      # Docker manages it, typically: /var/lib/docker/volumes/postgres-data
+      - postgres-data:/var/lib/postgresql/data
+
+      # BIND MOUNT (initialization script)
+      # Format: ./local/path:PATH_IN_CONTAINER
+      #
+      # ./postgres-exporter/init.sql: File on our computer
+      # /docker-entrypoint-initdb.d/init.sql: Special directory in container
+      #
+      # WHY THIS PATH?
+      # PostgreSQL Docker image automatically runs any .sql files in
+      # /docker-entrypoint-initdb.d/ on first startup
+      #
+      # WHAT DOES THIS DO?
+      # Our init.sql creates tables, inserts data, creates users
+      # This only runs once (first time database is created)
+      - ./postgres-exporter/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    # NETWORKS
+    networks:
+      - monitoring
+
+    # HEALTH CHECK
+    # Uses pg_isready command to check if PostgreSQL is accepting connections
+    #
+    # WHY THIS MATTERS:
+    # PostgreSQL takes a few seconds to start up. Other services
+    # (like postgres-exporter) need to wait until it's ready.
+    #
+    # SHELL vs ARRAY FORMAT:
+    # CMD-SHELL means run this in a shell: /bin/sh -c "pg_isready -U postgres"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    # RESTART POLICY
+    restart: unless-stopped
+
+  # ============================================================================
+  # SERVICE 3: POSTGRES EXPORTER (Metrics Translator)
+  # ============================================================================
+  # This is the EXPORTER service. This demonstrates the exporter pattern.
+  #
+  # WHAT IS AN EXPORTER?
+  # An exporter is a translator/adapter that:
+  # 1. Connects to a service (PostgreSQL)
+  # 2. Queries it for data (runs SQL queries)
+  # 3. Converts results to Prometheus format
+  # 4. Exposes /metrics endpoint for Prometheus to scrape
+  #
+  # WHY DO WE NEED THIS?
+  # PostgreSQL doesn't speak Prometheus format. It speaks SQL.
+  # The exporter bridges this gap.
+  #
+  # DATA FLOW:
+  # Prometheus → postgres-exporter:9187/metrics → queries PostgreSQL →
+  # → converts to Prometheus format → returns to Prometheus
+  # ============================================================================
+
+  postgres-exporter:
+    # IMAGE
+    # Official PostgreSQL exporter maintained by Prometheus community
+    #
+    # WHERE TO FIND EXPORTERS:
+    # - Official list: https://prometheus.io/docs/instrumenting/exporters/
+    # - Docker Hub: hub.docker.com/r/prometheuscommunity/postgres-exporter
+    image: prometheuscommunity/postgres-exporter:latest
+
+    # CONTAINER NAME
+    container_name: postgres-exporter
+
+    # ENVIRONMENT VARIABLES
+    # Configuration specific to postgres_exporter
+    environment:
+      # DATA_SOURCE_NAME (DSN)
+      # PostgreSQL connection string telling exporter how to connect
+      #
+      # FORMAT: postgresql://USER:PASSWORD@HOST:PORT/DATABASE?options
+      #
+      # BREAKDOWN:
+      # - postgresql:// = Protocol
+      # - postgres_exporter = Username (created in init.sql)
+      # - exporter_password = Password (created in init.sql)
+      # - postgres = Hostname (service name from docker-compose)
+      # - 5432 = PostgreSQL port
+      # - enterprise_db = Database name
+      # - sslmode=disable = Don't use SSL (okay for local dev)
+      #
+      # WHY THIS USER?
+      # We created a special read-only user for the exporter in init.sql
+      # It only has permission to read metrics, not modify data
+      DATA_SOURCE_NAME: "postgresql://postgres_exporter:exporter_password@postgres:5432/enterprise_db?sslmode=disable"
+
+      # PATH TO CUSTOM QUERIES
+      # Points to a YAML file with custom SQL queries
+      # This tells the exporter what additional metrics to collect
+      #
+      # WHY CUSTOM QUERIES?
+      # Default exporter provides database stats, but we also want
+      # business metrics (orders, revenue, users) from our tables
+      PG_EXPORTER_EXTEND_QUERY_PATH: "/etc/postgres-exporter/queries.yaml"
+
+    # PORT MAPPING
+    # Exporter listens on port 9187 (standard for postgres_exporter)
+    #
+    # WHY 9187?
+    # Prometheus exporters use different ports to avoid conflicts
+    # This is the standard port assigned to postgres_exporter
+    # See: https://github.com/prometheus/prometheus/wiki/Default-port-allocations
+    ports:
+      - "9187:9187"
+
+    # VOLUMES
+    # Mounts our custom queries file into the container
+    #
+    # FORMAT EXPLAINED:
+    # ./postgres-exporter/queries.yaml: File on our computer
+    # /etc/postgres-exporter/queries.yaml: Path inside container
+    # :ro = Read-only (container can't modify our file)
+    #
+    # WHY READ-ONLY?
+    # Security best practice. Container only needs to read, not write
+    volumes:
+      - ./postgres-exporter/queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+
+    # NETWORKS
+    networks:
+      - monitoring
+
+    # DEPENDS_ON (Startup Order)
+    # This tells Docker Compose: "Don't start postgres-exporter until
+    # postgres is healthy"
+    #
+    # TWO FORMATS:
+    # Simple: depends_on: [postgres]  (waits for container to start)
+    # Advanced: condition: service_healthy (waits for health check to pass)
+    #
+    # WHY THIS IS CRITICAL:
+    # If exporter starts before database is ready, connection fails
+    #
+    # WHAT HAPPENS:
+    # 1. Docker Compose starts postgres
+    # 2. Waits for health check to pass (pg_isready returns success)
+    # 3. Then starts postgres-exporter
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # RESTART POLICY
+    restart: unless-stopped
+
+  # ============================================================================
+  # SERVICE 4: PROMETHEUS (Metrics Collection)
+  # ============================================================================
+  # Prometheus is the heart of our monitoring system.
+  #
+  # WHAT PROMETHEUS DOES:
+  # 1. Scrapes metrics from targets (app-service, postgres-exporter)
+  # 2. Stores time-series data (metrics over time)
+  # 3. Evaluates alert rules
+  # 4. Provides query interface (PromQL)
+  # 5. Serves data to Grafana
+  #
+  # SCRAPING FLOW:
+  # Every 10-30 seconds, Prometheus:
+  # - HTTP GET to http://app-service:3000/metrics (direct)
+  # - HTTP GET to http://postgres-exporter:9187/metrics (via exporter)
+  # - Parses metrics, stores in time-series database
+  # ============================================================================
+
+  prometheus:
+    # IMAGE
+    # Official Prometheus image
+    image: prom/prometheus:latest
+
+    # CONTAINER NAME
+    container_name: prometheus
+
+    # COMMAND
+    # Overrides the default command the container runs
+    # These are command-line flags passed to Prometheus binary
+    #
+    # WHY OVERRIDE COMMAND?
+    # To customize Prometheus behavior with flags
+    # Each flag configures a different aspect of Prometheus
+    command:
+      # CONFIG FILE LOCATION
+      # Tells Prometheus where to find its configuration
+      # This file defines what to scrape and how
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+      # DATA STORAGE PATH
+      # Where Prometheus stores time-series data inside container
+      # This must match the volume mount below
+      - '--storage.tsdb.path=/prometheus'
+
+      # CONSOLE TEMPLATES
+      # Paths for Prometheus's built-in web console
+      # (We're using Grafana instead, but these are defaults)
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+      # DATA RETENTION
+      # How long to keep metrics before deleting old data
+      # 30d = 30 days of data
+      #
+      # WHY 30 DAYS?
+      # Balance between storage space and historical data
+      # Adjust based on your needs: 7d, 90d, 1y, etc.
+      - '--storage.tsdb.retention.time=30d'
+
+      # WEB LIFECYCLE API
+      # Allows reloading config without restarting
+      # Send POST to /-/reload to reload configuration
+      #
+      # WHY ENABLE THIS?
+      # Can update prometheus.yml without container restart
+      - '--web.enable-lifecycle'
+
+    # PORT MAPPING
+    # Prometheus web UI and API port
+    #
+    # ACCESS:
+    # - Web UI: http://localhost:9090
+    # - API: http://localhost:9090/api/v1/*
+    # - Metrics: http://localhost:9090/metrics (Prometheus monitoring itself!)
+    ports:
+      - "9090:9090"
+
+    # VOLUMES
+    # Mounts configuration files and data storage
+    volumes:
+      # CONFIGURATION FILE
+      # Our prometheus.yml defines what to scrape
+      # :ro = Read-only (Prometheus doesn't need to write to it)
+      #
+      # WHAT'S IN THIS FILE?
+      # - Scrape targets (app-service:3000, postgres-exporter:9187)
+      # - Scrape intervals (how often to collect metrics)
+      # - Labels to add to metrics
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+      # ALERT RULES FILE
+      # Defines conditions that trigger alerts
+      # Example: if error_rate > 0.1 for 5 minutes, alert
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+      # DATA PERSISTENCE
+      # Named volume to store time-series database
+      #
+      # WHY THIS MATTERS:
+      # Without this, all historical metrics are lost on restart!
+      # With this, metrics survive container restarts
+      #
+      # HOW MUCH SPACE?
+      # Depends on: number of metrics, retention time, scrape frequency
+      # Typical: 1-10GB for small setup
+      - prometheus-data:/prometheus
+
+    # NETWORKS
+    networks:
+      - monitoring
+
+    # DEPENDS_ON
+    # Wait for data sources to be available before starting
+    #
+    # WHY?
+    # Prometheus will log errors if it can't reach targets immediately
+    # This ensures targets are ready before Prometheus starts scraping
+    #
+    # NOTE: Prometheus will still work if targets are temporarily down
+    # It will keep retrying
+    depends_on:
+      - app-service
+      - postgres-exporter
+
+    # RESTART POLICY
+    restart: unless-stopped
+
+  # ============================================================================
+  # SERVICE 5: GRAFANA (Visualization)
+  # ============================================================================
+  # Grafana is our visualization and dashboarding tool.
+  #
+  # WHAT GRAFANA DOES:
+  # 1. Connects to Prometheus (datasource)
+  # 2. Queries metrics using PromQL
+  # 3. Creates visualizations (graphs, gauges, tables)
+  # 4. Organizes visualizations into dashboards
+  # 5. Can send alerts based on metric conditions
+  #
+  # DATA FLOW:
+  # User → Grafana UI → Grafana queries Prometheus → Prometheus returns data
+  # → Grafana visualizes it
+  # ============================================================================
+
+  grafana:
+    # IMAGE
+    # Official Grafana image
+    image: grafana/grafana:latest
+
+    # CONTAINER NAME
+    container_name: grafana
+
+    # ENVIRONMENT VARIABLES
+    # Grafana-specific configuration
+    #
+    # These settings can also be in grafana.ini file, but environment
+    # variables are easier for Docker deployments
+    environment:
+      # ADMIN CREDENTIALS
+      # Default login username
+      #
+      # SECURITY WARNING:
+      # Change these in production! These are only for demo.
+      GF_SECURITY_ADMIN_USER: admin
+
+      # Admin password
+      #
+      # PRODUCTION TIP:
+      # Use GF_SECURITY_ADMIN_PASSWORD__FILE to read from Docker secret
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+      # DISABLE USER SIGNUPS
+      # Prevent random people from creating accounts
+      # Only admin can create users
+      #
+      # WHY?
+      # Security. You don't want public access to your monitoring.
+      GF_USERS_ALLOW_SIGN_UP: false
+
+      # ROOT URL
+      # The URL where Grafana will be accessible
+      # Important for OAuth, redirects, and links
+      GF_SERVER_ROOT_URL: http://localhost:3001
+
+      # PLUGINS TO INSTALL (optional)
+      # Comma-separated list of plugin IDs to install on startup
+      # Example: GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
+      #
+      # WHY EMPTY?
+      # Built-in panels are sufficient for this demo
+      GF_INSTALL_PLUGINS: ''
+
+    # PORT MAPPING
+    # Grafana listens on port 3000 by default inside container
+    # We map it to 3001 on host to avoid conflict with our app on 3000
+    #
+    # FORMAT: "HOST_PORT:CONTAINER_PORT"
+    # Access Grafana at: http://localhost:3001
+    ports:
+      - "3001:3000"
+
+    # VOLUMES
+    # Mounts for data persistence and provisioning
+    volumes:
+      # DATA PERSISTENCE
+      # Stores dashboards, users, settings, etc.
+      #
+      # WHY?
+      # Without this, any dashboards you create manually are lost on restart
+      #
+      # WHAT'S STORED?
+      # - SQLite database with Grafana settings
+      # - Dashboard definitions
+      # - User accounts
+      # - Datasource configurations
+      - grafana-data:/var/lib/grafana
+
+      # DATASOURCE PROVISIONING
+      # Auto-configures Prometheus as datasource
+      #
+      # HOW IT WORKS:
+      # Grafana scans /etc/grafana/provisioning/datasources/ on startup
+      # Any YAML files found are used to create datasources automatically
+      #
+      # BENEFIT:
+      # Grafana is pre-configured! No manual "Add datasource" steps needed
+      #
+      # WHAT'S IN OUR FILE?
+      # - Datasource name: "Prometheus"
+      # - Type: prometheus
+      # - URL: http://prometheus:9090
+      # - Default: true (use this by default)
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+
+      # DASHBOARD PROVISIONING
+      # Auto-loads dashboards from JSON files
+      #
+      # HOW IT WORKS:
+      # 1. Grafana reads dashboard-provider.yml
+      # 2. That file points to directory with JSON dashboards
+      # 3. Grafana loads all .json files as dashboards
+      #
+      # BENEFIT:
+      # Dashboards are pre-loaded! No need to import manually.
+      #
+      # OUR DASHBOARDS:
+      # - application-dashboard.json (Node.js app metrics)
+      # - database-dashboard.json (PostgreSQL metrics via exporter)
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+
+    # NETWORKS
+    networks:
+      - monitoring
+
+    # DEPENDS_ON
+    # Wait for Prometheus to be available
+    #
+    # WHY?
+    # Grafana will show errors if it can't connect to datasource
+    # This ensures Prometheus is running before Grafana starts
+    #
+    # NOTE: Grafana will still work if Prometheus is temporarily down
+    depends_on:
+      - prometheus
+
+    # RESTART POLICY
+    restart: unless-stopped
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+# Networks allow containers to communicate with each other.
+# Think of it like creating a virtual LAN (Local Area Network).
+#
+# WHAT DOCKER COMPOSE DOES:
+# 1. Creates a network named "projectname_monitoring"
+# 2. Connects all services that list "monitoring" to this network
+# 3. Provides DNS resolution (service names become hostnames)
+#
+# HOW CONTAINERS COMMUNICATE:
+# From prometheus container:
+#   curl http://app-service:3000/metrics     ← service name is hostname
+#   curl http://postgres-exporter:9187/metrics
+#
+# From grafana container:
+#   curl http://prometheus:9090/api/v1/query
+#
+# WHY NOT JUST USE HOST NETWORK?
+# - Isolation: Other Docker containers can't access our services
+# - Portability: Same config works everywhere
+# - Security: Not all ports need to be exposed to host
+# - DNS: Automatic hostname resolution
+#
+# NETWORK DRIVERS:
+# - bridge (default): Standard networking, what we use here
+# - host: Container uses host's network directly (no isolation)
+# - overlay: For multi-host networking (Docker Swarm, Kubernetes)
+# - none: No networking
+# ==============================================================================
+
+networks:
+  # NETWORK NAME
+  # All services connected to "monitoring" can communicate
+  monitoring:
+    # DRIVER
+    # 'bridge' creates a virtual network bridge
+    # This is the default and most common for single-host setups
+    #
+    # WHAT BRIDGE DRIVER DOES:
+    # - Creates virtual network interface
+    # - Provides NAT for outbound connections
+    # - Enables inter-container communication
+    # - Provides DNS resolution between containers
+    driver: bridge
+
+# ==============================================================================
+# VOLUMES
+# ==============================================================================
+# Volumes persist data beyond container lifecycle.
+# Think of them as external hard drives that containers can plug into.
+#
+# WHY VOLUMES ARE ESSENTIAL:
+# Containers are ephemeral (temporary). When you delete a container,
+# everything inside is lost. Volumes solve this by storing data outside
+# the container in Docker-managed storage.
+#
+# WHAT HAPPENS WITHOUT VOLUMES:
+# 1. Start postgres, add data
+# 2. Stop container
+# 3. Start postgres again
+# 4. ALL DATA IS GONE! Database is empty.
+#
+# WHAT HAPPENS WITH VOLUMES:
+# 1. Start postgres with volume, add data
+# 2. Stop container
+# 3. Start postgres again
+# 4. Data is still there! Volume persisted it.
+#
+# WHERE IS DATA STORED?
+# Docker manages volumes in: /var/lib/docker/volumes/
+# Each volume gets a directory: /var/lib/docker/volumes/VOLUME_NAME/_data
+#
+# NAMED VS ANONYMOUS VOLUMES:
+# - Named: "postgres-data" (we name it, can reference it)
+# - Anonymous: Just "/path/in/container" (Docker generates random name)
+#
+# VOLUMES VS BIND MOUNTS:
+# - Volumes: Docker-managed storage (what we define here)
+# - Bind mounts: Mount a specific host directory (like ./config.yml)
+#
+# INSPECTING VOLUMES:
+# docker volume ls                    ← List all volumes
+# docker volume inspect postgres-data ← See details
+# docker volume rm postgres-data      ← Delete (only when not in use)
+#
+# BACKING UP VOLUMES:
+# docker run --rm -v postgres-data:/data -v $(pwd):/backup alpine \
+#   tar czf /backup/postgres-backup.tar.gz /data
+# ==============================================================================
+
+volumes:
+  # POSTGRES DATA VOLUME
+  # Stores PostgreSQL database files
+  #
+  # WHAT'S STORED:
+  # - Database tables and data
+  # - Indexes
+  # - Transaction logs
+  # - Configuration changes
+  #
+  # SIZE:
+  # Grows as you add data. For this demo: ~50-100MB
+  #
+  # LIFECYCLE:
+  # Persists even after 'docker-compose down'
+  # Only deleted with 'docker-compose down -v' (dangerous!)
+  postgres-data:
+
+  # PROMETHEUS DATA VOLUME
+  # Stores time-series metrics data
+  #
+  # WHAT'S STORED:
+  # - All collected metrics over time
+  # - Time-series database (TSDB) blocks
+  # - WAL (Write-Ahead Log)
+  #
+  # SIZE:
+  # Depends on:
+  # - Number of metrics (we have ~50 metrics)
+  # - Retention time (we keep 30 days)
+  # - Scrape frequency (every 10-30 seconds)
+  # Estimate: 1-5GB for this setup
+  #
+  # PERFORMANCE NOTE:
+  # Prometheus is I/O intensive. SSD recommended for production.
+  prometheus-data:
+
+  # GRAFANA DATA VOLUME
+  # Stores Grafana application data
+  #
+  # WHAT'S STORED:
+  # - SQLite database with Grafana settings
+  # - Dashboard definitions (if created via UI)
+  # - User accounts and permissions
+  # - Datasource configurations
+  # - Annotations and playlists
+  #
+  # SIZE:
+  # Very small, typically <100MB
+  #
+  # NOTE:
+  # Dashboards in ./grafana/dashboards/ are provisioned (read-only)
+  # Any dashboards created in UI are stored here (editable)
+  grafana-data:
+
+# ==============================================================================
+# HOW TO USE THIS FILE
+# ==============================================================================
+#
+# START ALL SERVICES:
+# docker-compose up -d
+#   -d = detached mode (runs in background)
+#
+# VIEW LOGS:
+# docker-compose logs -f
+#   -f = follow (like tail -f)
+#
+# CHECK STATUS:
+# docker-compose ps
+#
+# STOP ALL SERVICES:
+# docker-compose stop
+#   (containers remain, can be restarted)
+#
+# REMOVE ALL SERVICES:
+# docker-compose down
+#   (removes containers, keeps volumes)
+#
+# REMOVE EVERYTHING INCLUDING DATA:
+# docker-compose down -v
+#   (removes containers AND volumes - DATA LOSS!)
+#
+# RESTART SPECIFIC SERVICE:
+# docker-compose restart app-service
+#
+# REBUILD SPECIFIC SERVICE:
+# docker-compose up -d --build app-service
+#
+# VIEW LOGS OF SPECIFIC SERVICE:
+# docker-compose logs -f prometheus
+#
+# EXECUTE COMMAND IN RUNNING CONTAINER:
+# docker-compose exec postgres psql -U postgres
+#
+# ==============================================================================
+# TROUBLESHOOTING
+# ==============================================================================
+#
+# SERVICES WON'T START:
+# 1. Check logs: docker-compose logs
+# 2. Check Docker is running: docker ps
+# 3. Check ports not in use: lsof -i :3000
+# 4. Try rebuilding: docker-compose up -d --build
+#
+# "NETWORK NOT FOUND" ERROR:
+# docker-compose down && docker-compose up -d
+#
+# "VOLUME NOT FOUND" ERROR:
+# docker volume ls
+# docker volume create prometheus-data
+#
+# CHANGES NOT TAKING EFFECT:
+# docker-compose down && docker-compose up -d --build
+#
+# OUT OF DISK SPACE:
+# docker system prune -a --volumes (WARNING: removes unused data)
+#
+# CONTAINER KEEPS RESTARTING:
+# docker-compose logs [service-name]
+#   Check for error messages
+#
+# ==============================================================================
