@@ -495,6 +495,14 @@ volumes:
 
 ## Common Commands
 
+**Important**: If you get "permission denied" errors when running these commands, you need to fix Docker permissions first. See the [Docker Permission Issues section in README.md](README.md#docker-permission-issues) or [QUICK_START.md Step 0](QUICK_START.md#0-fix-docker-permissions-first-time-setup).
+
+Quick fix options:
+- **Option A** (recommended): Add your user to docker group with `sudo usermod -aG docker $USER` (one-time setup)
+- **Option B**: Prefix all commands below with `sudo` (e.g., `sudo docker-compose up -d`)
+
+---
+
 ### Starting Services
 
 ```bash

@@ -73,6 +73,7 @@ A complete monitoring stack demonstrating two different approaches to metrics co
 
 - **Docker** (v20.10+)
 - **Docker Compose** (v2.0+)
+- **Proper Docker permissions** (see troubleshooting below if you get "permission denied")
 - At least 4GB RAM available
 - Ports available: 3000, 3001, 5432, 9090, 9187
 
@@ -81,6 +82,8 @@ Check if Docker is installed:
 docker --version
 docker-compose --version
 ```
+
+**Important**: If you get "permission denied" errors when running Docker commands, see the [Docker Permission Issues](#docker-permission-issues) section in Troubleshooting below.
 
 ---
 
@@ -544,6 +547,46 @@ Grafana has thousands of pre-built dashboards:
 ---
 
 ## Troubleshooting
+
+### Docker Permission Issues
+
+If you get this error:
+```
+Error: permission denied while trying to connect to the Docker daemon socket
+```
+
+This means your user doesn't have permission to access Docker. You have two options:
+
+#### Option A: Add Your User to Docker Group (Recommended - One-Time Setup)
+
+```bash
+# Add your user to the docker group
+sudo usermod -aG docker $USER
+
+# Apply the changes (choose one):
+# Option 1: Log out and log back in
+# Option 2: Run this command:
+newgrp docker
+
+# Verify it works (should show Docker info without sudo):
+docker ps
+```
+
+**This is a ONE-TIME setup.** After this, you won't need `sudo` for Docker commands.
+
+#### Option B: Use sudo (Quick Fix)
+
+If you don't want to add your user to the docker group, prefix all Docker commands with `sudo`:
+
+```bash
+sudo docker compose up -d
+sudo docker compose ps
+sudo docker compose logs
+```
+
+**Note**: For complete setup instructions, see `QUICK_START.md` which has detailed steps for fixing Docker permissions.
+
+---
 
 ### Services Won't Start
 

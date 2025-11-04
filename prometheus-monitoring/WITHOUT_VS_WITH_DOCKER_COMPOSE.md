@@ -2,6 +2,8 @@
 
 This document shows exactly what you'd need to do manually without Docker Compose, compared to using Docker Compose. This clearly demonstrates why Docker Compose is essential.
 
+**Important**: If you get "permission denied" errors when running Docker commands below, you need to fix Docker permissions first. See [QUICK_START.md Step 0](QUICK_START.md#0-fix-docker-permissions-first-time-setup) or [README.md Troubleshooting](README.md#docker-permission-issues).
+
 ---
 
 ## Starting the Full Monitoring Stack
